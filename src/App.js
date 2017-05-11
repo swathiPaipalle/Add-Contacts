@@ -1,17 +1,21 @@
 import React  from 'react';
 import ReactDOM  from 'react-dom';
+import PropTypes from 'prop-types';
 import './App.css';
 
-var listContact = React.createClass({
+var createReactClass = require('create-react-class');
+
+var listContact = createReactClass({
     propTypes: {
-        name: React.PropTypes.string.isRequired,
-        email: React.PropTypes.string.isRequired,
-        description: React.PropTypes.string,
+        id: PropTypes.string.isRequired,
+        name: PropTypes.string.isRequired,
+        email: PropTypes.string.isRequired,
+        description: PropTypes.string,
     },
     render: function(){
         return(
             React.createElement('li', {},
-                React.createElement('h2', {}, this.props.name),
+                React.createElement('a', {href: "#/contacts/"+this.props.id, className: 'ContactItem-name'}, this.props.name),
                 React.createElement('a', {href: 'mailto:'+this.props.email}, this.props.email),
                 React.createElement('div', {}, this.props.description)
             )
@@ -19,12 +23,11 @@ var listContact = React.createClass({
     }
 });
 
-
-var ContactForm = React.createClass({
+var ContactForm = createReactClass({
     propTypes: {
-        value: React.PropTypes.object.isRequired,
-        onChange: React.PropTypes.func.isRequired,
-        onSubmit: React.PropTypes.func.isRequired,
+        value: PropTypes.object.isRequired,
+        onChange: PropTypes.func.isRequired,
+        onSubmit: PropTypes.func.isRequired,
     },
     onNameChange: function(e) {
         this.props.onChange(Object.assign({}, this.props.value, {name: e.target.value}));
@@ -84,17 +87,18 @@ var ContactForm = React.createClass({
         );
     }
 });
-var ContactView = React.createClass({
+
+var ContactView = createReactClass({
     propTypes: {
-        contacts: React.PropTypes.array.isRequired,
-        newContact: React.PropTypes.object.isRequired,
-        onNewContactChange: React.PropTypes.func.isRequired,
-        onNewContactSubmit: React.PropTypes.func.isRequired,
+        contacts: PropTypes.array.isRequired,
+        newContact: PropTypes.object.isRequired,
+        onNewContactChange: PropTypes.func.isRequired,
+        onNewContactSubmit: PropTypes.func.isRequired,
     },
     render: function(){
         var contactElements =  this.props.contacts
             .filter(function(contact) {return contact.email})
-            .map(function(contact){return React.createElement(listContact, contact)});
+            .map(function(contact) { return React.createElement(listContact, Object.assign({}, contact, {id: contact.key})); });
 
         return(
             React.createElement('div', {className: 'ContactView'},
@@ -110,9 +114,43 @@ var ContactView = React.createClass({
     }
 });
 
+var EditView = createReactClass({
+    propTypes: {
+        onChangeContact: PropTypes.func.isRequired,
+        onSubmitContact: PropTypes.func.isRequired,
+        contacts: PropTypes.array.isRequired,
+        id: PropTypes.string.isRequired,
+    },
+    render: function () {
+        var key = this.props.id;
+        var contactForm = this.props.contacts.filter(function(contact){ return contact.key == key; })[0];
+
+        return(
+            !contactForm
+            ? React.createElement('h1', {}, "Not Found")
+            : React.createElement('div', {className: 'EditView'},
+                React.createElement('h1', {className: 'ContactView-title'}, "Edit Contact"),
+                React.createElement(ContactForm, {
+                    value: contactForm,
+                    onChange: this.props.onChangeContact,
+                    onSubmit: this.props.onSubmitContact,
+                })
+            )
+        );
+    }
+});
+
+/* Constants */
 var CONTACT_TEMPLATE = {name: "", email: "", description: "", errors:null};
 // The app's complete current state
 var state = {};
+
+
+/* Actions */
+
+function updateNewContact(contact) {
+    setState({ newContact: contact });
+}
 
 function submitNewContact() {
     var contact = Object.assign({}, state.newContact, {key: state.contacts.length+1, errors: {}});
@@ -135,22 +173,53 @@ function submitNewContact() {
     );
 
 }
+var Application = createReactClass({
+    propTypes: {
+        location: PropTypes.array.isRequired,
+    },
 
-function updateNewContact(contact) {
-    setState({ newContact: contact });
+   render: function(){
+       switch(this.props.location[0]) {
+           case 'contacts':
+               if(this.props.location[1]){
+                   return React.createElement(EditView, Object.assign({}, this.props, {
+                       id: this.props.location[1],
+                       onChangeContact: updateNewContact,
+                       onSubmitContact: submitNewContact,
+                   }));
+               }else {
+                   return React.createElement(ContactView, Object.assign({}, this.props, {
+                       onNewContactChange: updateNewContact,
+                       onNewContactSubmit: submitNewContact,
+                   }));
+               }
+               break;
+           default:
+               return React.createElement('div', {},
+                   React.createElement('h1', {}, "Not Found"),
+                   React.createElement('a', {href: '#/contacts'}, "Contacts")
+               );
+       }
+   }
+});
+
+function navigated() {
+    setState({
+        location: window.location.hash.replace(/^#\/?|\/$/g, '').split('/')
+    });
 }
 
 // Make the given changes to the state and perform any required housekeeping
 function setState(changes) {
     Object.assign(state, changes);
 
-    ReactDOM.render(
-        React.createElement(ContactView, Object.assign({}, state, {
-            onNewContactChange: updateNewContact,
-            onNewContactSubmit: submitNewContact,
-        })),
-        document.getElementById('contact-form')
-    );
+    if(!state.transitioning){
+        ReactDOM.render(
+            React.createElement(Application, state),
+            document.getElementById('contact-form')
+        );
+    }
+
 }
 
 // Set initial data
@@ -160,5 +229,10 @@ setState({
         {key: 2, name: "Bar", email: "bar@bar.com"},
     ],
     newContact: Object.assign({}, CONTACT_TEMPLATE),
+    location: window.location.hash,
+    transitioning: false
 });
 
+window.addEventListener('hashchange', navigated, false);
+
+navigated();
